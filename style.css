@@ -1,0 +1,42 @@
+body {
+    background-color: #121212;
+    color: white;
+}
+
+.left-panel, .right-panel {
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 2px solid #333;
+    background: #212529;
+}
+
+h2 {
+    font-size: 24px;
+    margin-bottom: 15px;
+}
+
+.table {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.alert {
+    font-size: 18px;
+}
+
+.chart-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding-top: 10px;
+}
+
+canvas {
+    width: 90%;
+    max-width: 500px;
+    height: 250px;
+    background: #fff;
+    border-radius: 10px;
+    padding: 10px;
+}

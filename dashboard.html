@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi IDS Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #eef2f7;
+        }
+        .dashboard-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+        }
+        .left-panel, .right-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        .left-panel {
+            flex: 1;
+            min-width: 300px;
+        }
+        .right-panel {
+            flex: 2;
+            min-width: 400px;
+        }
+        .network-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .alert {
+            display: none;
+        }
+        .blink {
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="text-center my-3">WiFi Intrusion Detection System</h1>
+        <div class="dashboard-container">
+            <!-- Left Panel -->
+            <div class="left-panel">
+                <h4>Available Networks</h4>
+                <div class="alert alert-danger blink" id="alertBox">⚠️ Rogue network detected!</div>
+                <ul class="list-group network-list" id="networkList"></ul>
+                
+                <h5 class="mt-4">Threat Analysis</h5>
+                <table class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>SSID</th>
+                            <th>Encryption</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="threatTable"></tbody>
+                </table>
+            </div>
+
+            <!-- Right Panel -->
+            <div class="right-panel">
+                <h4>Network Signal Strength Analysis</h4>
+                <canvas id="signalChart"></canvas>
+
+                <h4 class="mt-4">Security Type Distribution</h4>
+                <canvas id="securityChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <script>
+        async function fetchNetworks() {
+            try {
+                const response = await fetch("http://192.168.159.15:5000/upload");
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = await response.json();
+                updateDashboard(data.networks);
+            } catch (error) {
+                console.error("Error fetching networks:", error);
+            }
+        }
+
+        function updateDashboard(networks) {
+            const networkList = document.getElementById("networkList");
+            const alertBox = document.getElementById("alertBox");
+            const threatTable = document.getElementById("threatTable");
+            networkList.innerHTML = "";
+            threatTable.innerHTML = "";
+
+            let hasThreat = false;
+            let signalData = [];
+            let labels = [];
+            let securityTypes = {};
+
+            networks.forEach((network) => {
+                const listItem = document.createElement("li");
+                listItem.className = `list-group-item ${network.Encryption.includes('Open') ? 'list-group-item-danger' : 'list-group-item-success'}`;
+                listItem.innerHTML = `<strong>${network.SSID}</strong> - ${network.BSSID} - ${network.RSSI} dBm - ${network.Encryption}`;
+                networkList.appendChild(listItem);
+
+                if (network.Encryption.includes('Open')) {
+                    hasThreat = true;
+                    threatTable.innerHTML += `
+                        <tr class="table-danger">
+                            <td>${network.SSID}</td>
+                            <td>${network.Encryption}</td>
+                            <td>⚠️ Insecure</td>
+                        </tr>`;
+                } else {
+                    threatTable.innerHTML += `
+                        <tr class="table-success">
+                            <td>${network.SSID}</td>
+                            <td>${network.Encryption}</td>
+                            <td>✅ Secure</td>
+                        </tr>`;
+                }
+
+                signalData.push(network.RSSI);
+                labels.push(network.SSID);
+
+                securityTypes[network.Encryption] = (securityTypes[network.Encryption] || 0) + 1;
+            });
+
+            alertBox.style.display = hasThreat ? "block" : "none";
+            updateCharts(labels, signalData, securityTypes);
+        }
+
+        let signalChart, securityChart;
+        function updateCharts(labels, signalData, securityTypes) {
+            if (!signalChart) {
+                const ctx = document.getElementById("signalChart").getContext("2d");
+                signalChart = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: "Signal Strength (RSSI)",
+                            data: signalData,
+                            borderColor: "#007bff",
+                            backgroundColor: "rgba(0, 123, 255, 0.2)",
+                            fill: true,
+                        }],
+                    },
+                    options: {
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${context.raw} dBm`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                signalChart.data.labels = labels;
+                signalChart.data.datasets[0].data = signalData;
+                signalChart.update();
+            }
+
+            const secLabels = Object.keys(securityTypes);
+            const secData = Object.values(securityTypes);
+
+            if (!securityChart) {
+                const ctx2 = document.getElementById("securityChart").getContext("2d");
+                securityChart = new Chart(ctx2, {
+                    type: "bar",
+                    data: {
+                        labels: secLabels,
+                        datasets: [{
+                            label: "Security Type Count",
+                            data: secData,
+                            backgroundColor: [
+                                "rgba(255, 99, 132, 0.7)",
+                                "rgba(54, 162, 235, 0.7)",
+                                "rgba(75, 192, 192, 0.7)",
+                                "rgba(255, 206, 86, 0.7)"
+                            ],
+                            borderColor: [
+                                "rgba(255, 99, 132, 1)",
+                                "rgba(54, 162, 235, 1)",
+                                "rgba(75, 192, 192, 1)",
+                                "rgba(255, 206, 86, 1)"
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            } else {
+                securityChart.data.labels = secLabels;
+                securityChart.data.datasets[0].data = secData;
+                securityChart.update();
+            }
+        }
+
+        setInterval(fetchNetworks, 5000);
+        fetchNetworks();
+    </script>
+</body>
+</html>
